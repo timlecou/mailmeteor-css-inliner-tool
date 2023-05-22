@@ -76,68 +76,10 @@
       }
 
       /**
-       * isValidCssLink : Checks if the url parameter is a valid css stylesheet link, checking if it begins with `http` and if the extension is `.css`
-       * @return : true if the link is valid, false otherwise
-       */
-      function isValidCssLink(url) {
-        const cssLinkPattern = /^(http|https):\/\/.*\.css(\?[^\/]*$|#|$)/;
-        return cssLinkPattern.test(url);
-      }
-
-      /**
-       * reinjectStylesheets : Reinject stylesheets as <style> tags in html_document
-       * @param {html_document} : HTMLDocument in which the stylesheets are injected
-       */
-      async function reinjectStylesheets(html_document) {
-        return new Promise((resolve) => {
-          // Filter the links to keep only the valid css stylesheets
-          let links = Array.from(
-            html_document.querySelectorAll(Constants.HTML_ELEMENT_LINK)
-          )
-            .filter((element) =>
-              isValidCssLink(
-                element.getAttribute(Constants.HTML_ATTRIBUTE_HREF)
-              )
-            )
-            .map((element) => {
-              return element.getAttribute(Constants.HTML_ATTRIBUTE_HREF);
-            });
-
-          // Requests the server with the stylesheet links to resolve them.
-          // The server bypasses the CORS Policy, resolves the stylesheet links and send back theyre contents
-          fetch(
-            Constants.SERVER_HOST +
-            ":" +
-            Constants.SERVER_PORT +
-            Constants.SERVER_ROUTE,
-            {
-              method: Constants.HTTP_METHOD_POST,
-              headers: {
-                "Content-Type": Constants.CONTENT_TYPE_APPLICATION_JSON,
-              },
-              body: JSON.stringify({
-                links: links,
-              }),
-            }
-          ).then(async (response) => {
-            const styles = await response.json();
-
-            // Inject resolved styles in the document as <style> tags
-            Object.values(styles).forEach((style) => {
-              let new_element = html_document.createElement(Constants.STYLE);
-              new_element.innerHTML = style;
-              html_document.body.appendChild(new_element);
-            });
-            resolve();
-          });
-        });
-      }
-
-      /**
        * convertStyleToInline : Inlines the style the HTML code in the input textarea, writes the converted code in the output textarea
        * @param {event} : Submit event of the input form
        */
-      async function convertStyleToInline(event) {
+      function convertStyleToInline(event) {
         event.preventDefault();
 
         // Extract from input textarea and parse HTML code
@@ -149,9 +91,6 @@
           textarea_content,
           Constants.CONTENT_TYPE_TEXT_HTML
         );
-
-        // Reinject stylesheets as <style> tags
-        await reinjectStylesheets(html_document);
 
         // Parse CSS tags into javascript object
         const css_tags = html_document.querySelectorAll(Constants.STYLE);
