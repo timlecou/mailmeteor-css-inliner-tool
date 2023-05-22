@@ -1,0 +1,15 @@
+{
+  "name": "mailmeteor-css-inliner-tool",
+  "version": "1.0.0",
+  "description": "",
+  "main": "css-inliner.test.js",
+  "scripts": {
+    "test": "jest"
+  },
+  "devDependencies": {
+    "jest": "^29.5.0"
+  },
+  "dependencies": {
+    "jsdom": "^22.0.0"
+  }
+}
