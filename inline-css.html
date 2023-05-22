@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Mailmeteor CSS inliner</title>
+  </head>
+  <body>
+    <form id="inputForm">
+      <textarea id="inputTextArea" rows="20" cols="50"></textarea>
+      <input type="submit" value="convertir" />
+    </form>
+    <textarea id="resultTextArea" rows="20" cols="50"></textarea>
+    <script>
+
+      /**
+       * Constants
+       */
+      class Constants {
+        static STYLE = "style";
+        static SERVER_HOST = "http://127.0.0.1";
+        static SERVER_PORT = "5000";
+        static RESULT_TEXTAREA = "resultTextArea";
+        static SERVER_ROUTE = "/styles";
+        static INPUT_FORM = "inputForm";
+        static INPUT_TEXTAREA = "inputTextArea";
+        static CONTENT_TYPE_TEXT_HTML = "text/html";
+        static CONTENT_TYPE_APPLICATION_JSON = "application/json";
+        static HTTP_METHOD_POST = "POST";
+        static HTML_ELEMENT_LINK_STYLESHEET = "link[rel='stylesheet']";
+        static HTML_ELEMENT_LINK = "link";
+        static HTML_ATTRIBUTE_HREF = "href";
+        static SUBMIT_EVENT = "submit";
+      }
+
+      /**
+       * parseCSS : Parses stylesheets parameter into javascript object
+       * @param {stylesheets} : List of HTMLStyleElement
+       * @return : object of CSS rules
+       */
+      function parseCSS(stylesheets) {
+        let cssObject = {};
+
+        stylesheets.forEach((sheet) => {
+          const rules = Array(...sheet.sheet.cssRules).filter(
+            (r) => r.type === CSSRule.STYLE_RULE
+          );
+
+          rules.forEach((rule) => {
+            const selector = rule.selectorText;
+            if (!cssObject[selector]) cssObject[selector] = {};
+            for (let i = 0; i < rule.style.length; i++) {
+              const prop = rule.style[i];
+              const value = rule.style[prop];
+              cssObject[selector][prop] = value;
+            }
+          });
+        });
+        return cssObject;
+      }
+
+      /**
+       * injectInlineStyles : Injects the css_rules parameter into the html_document parameter
+       * @param {css_rules} : object of all the CSS rules to apply
+       * @param {html_document} : HTMLDocument in which CSS rules are applied
+       * @return : the HTMLDocument containing all the applied CSS rules
+       */
+      function injectInlineStyles(css_rules, html_document) {
+        for (const selector in css_rules) {
+          const elements = html_document.querySelectorAll(selector);
+
+          elements.forEach((element) => {
+            for (const property in css_rules[selector]) {
+              element.style[property] = css_rules[selector][property];
+            }
+          });
+        }
+      }
+
+      /**
+       * isValidCssLink : Checks if the url parameter is a valid css stylesheet link, checking if it begins with `http` and if the extension is `.css`
+       * @return : true if the link is valid, false otherwise
+       */
+      function isValidCssLink(url) {
+        const cssLinkPattern = /^(http|https):\/\/.*\.css(\?[^\/]*$|#|$)/;
+        return cssLinkPattern.test(url);
+      }
+
+      /**
+       * reinjectStylesheets : Reinject stylesheets as <style> tags in html_document
+       * @param {html_document} : HTMLDocument in which the stylesheets are injected
+       */
+      async function reinjectStylesheets(html_document) {
+        return new Promise((resolve) => {
+          // Filter the links to keep only the valid css stylesheets
+          let links = Array.from(
+            html_document.querySelectorAll(Constants.HTML_ELEMENT_LINK)
+          )
+            .filter((element) =>
+              isValidCssLink(
+                element.getAttribute(Constants.HTML_ATTRIBUTE_HREF)
+              )
+            )
+            .map((element) => {
+              return element.getAttribute(Constants.HTML_ATTRIBUTE_HREF);
+            });
+
+          // Requests the server with the stylesheet links to resolve them.
+          // The server bypasses the CORS Policy, resolves the stylesheet links and send back theyre contents
+          fetch(
+            Constants.SERVER_HOST +
+            ":" +
+            Constants.SERVER_PORT +
+            Constants.SERVER_ROUTE,
+            {
+              method: Constants.HTTP_METHOD_POST,
+              headers: {
+                "Content-Type": Constants.CONTENT_TYPE_APPLICATION_JSON,
+              },
+              body: JSON.stringify({
+                links: links,
+              }),
+            }
+          ).then(async (response) => {
+            const styles = await response.json();
+
+            // Inject resolved styles in the document as <style> tags
+            Object.values(styles).forEach((style) => {
+              let new_element = html_document.createElement(Constants.STYLE);
+              new_element.innerHTML = style;
+              html_document.body.appendChild(new_element);
+            });
+            resolve();
+          });
+        });
+      }
+
+      /**
+       * convertStyleToInline : Inlines the style the HTML code in the input textarea, writes the converted code in the output textarea
+       * @param {event} : Submit event of the input form
+       */
+      async function convertStyleToInline(event) {
+        event.preventDefault();
+
+        // Extract from input textarea and parse HTML code
+        const textarea_content = document.getElementById(
+          Constants.INPUT_TEXTAREA
+        ).value;
+        const parser = new DOMParser();
+        const html_document = parser.parseFromString(
+          textarea_content,
+          Constants.CONTENT_TYPE_TEXT_HTML
+        );
+
+        // Reinject stylesheets as <style> tags
+        await reinjectStylesheets(html_document);
+
+        // Parse CSS tags into javascript object
+        const css_tags = html_document.querySelectorAll(Constants.STYLE);
+        const css_object = parseCSS(css_tags);
+
+        // Remove style tags and stylesheet links from document
+        css_tags.forEach((tag) => tag.remove());
+        let links = html_document.querySelectorAll(
+          Constants.HTML_ELEMENT_LINK_STYLESHEET
+        );
+        links.forEach((link) => link.remove());
+
+        // Inject CSS rules inline in the document
+        injectInlineStyles(css_object, html_document);
+
+        // Write the result in output textarea
+        document.getElementById(Constants.RESULT_TEXTAREA).value =
+          html_document.documentElement.outerHTML;
+      }
+
+      // Add event listener on input form to be triggered when it is submitted
+      document
+        .getElementById(Constants.INPUT_FORM)
+        .addEventListener(Constants.SUBMIT_EVENT, convertStyleToInline);
+    </script>
+  </body>
+</html>
